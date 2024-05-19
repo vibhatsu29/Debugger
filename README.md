@@ -41,3 +41,9 @@ Currently, one can set breakpoints and continue execution, read and write any re
 - To exit
     ```
     q
+- To execute shell command
+    ```
+    cmd <command>
+- For help
+    ```
+    help

@@ -13,8 +13,6 @@
 #include "breakpoint.hpp"
 #include "regs.hpp"
 
-using namespace mydbg;
-
 std::vector<std::string> split(const std::string &s, char delimiter)
 {
     std::vector<std::string> out{};
@@ -36,7 +34,7 @@ bool is_prefix(const std::string &s, const std::string &of)
     return std::equal(s.begin(), s.end(), of.begin());
 }
 
-void debugger::run()
+void mydbg::debugger::run()
 {
     int wait_status;
     auto options = 0;
@@ -44,15 +42,18 @@ void debugger::run()
     char *line = nullptr;
     while ((line = linenoise("\x1B[1m\x1B[92mmydbg> \x1B[0m")) != nullptr)
     {
+        // dump_registers();
         handle_command(line);
         linenoiseHistoryAdd(line);
         linenoiseHistoryFree();
     }
 }
-void debugger::handle_command(const std::string &line)
+void mydbg::debugger::handle_command(const std::string &line)
 {
     auto args = split(line, ' ');
     auto command = args[0];
+    if (!is_prefix(command, "q"))
+        dump_registers();
     if (is_prefix(command, "c"))
     {
         continue_execution();
@@ -115,26 +116,46 @@ void debugger::handle_command(const std::string &line)
         ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
         wait_for_signal();
     }
+    else if (is_prefix(command, "help"))
+    {
+        std::cout << "\x1B[1m\x1B[38;5;mCommands:\n"
+                  << "b <address> - Set breakpoint at address\n"
+                  << "c - Continue execution\n"
+                  << "regs dump - Dump registers\n"
+                  << "regs r <register> - Read register value\n"
+                  << "regs w <register> <value> - Write register value\n"
+                  << "mem r <address> - Read memory at address\n"
+                  << "mem w <address> <value> - Write memory at address\n"
+                  << "so - Step over breakpoint\n"
+                  << "si - Step instruction\n"
+                  << "q - Quit debugger\n"
+                  << "help - Show this help message\n\x1B[0m";
+    }
+    else if (is_prefix(command, "cmd"))
+    {
+        std::string cmd = line.substr(4);
+        system(cmd.c_str());
+    }
     else
     {
         std::cerr << "\x1B[1m\x1B[91mUnknown command\x1B[0m\n";
     }
 }
-uint64_t debugger::read_memory(uint64_t address)
+uint64_t mydbg::debugger::read_memory(uint64_t address)
 {
     return ptrace(PTRACE_PEEKDATA, m_pid, address, nullptr);
 }
-void debugger::write_memory(uint64_t address, uint64_t value)
+void mydbg::debugger::write_memory(uint64_t address, uint64_t value)
 {
     ptrace(PTRACE_POKEDATA, m_pid, address, value);
 }
-void debugger::continue_execution()
+void mydbg::debugger::continue_execution()
 {
-    step_over_breakpoint();
+    // step_over_breakpoint();
     ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
     wait_for_signal();
 }
-void debugger::set_breakpoint_at(uint64_t addr)
+void mydbg::debugger::set_breakpoint_at(uint64_t addr)
 {
     intptr_t m_address = static_cast<intptr_t>(m_base_addr + addr);
     std::cout << "Set breakpoint at address \x1B[38;5;196m0x" << std::hex << m_address << "\x1B[0m" << std::endl;
@@ -146,28 +167,29 @@ void debugger::set_breakpoint_at(uint64_t addr)
         std::cout << "Breakpoint at address \x1B[38;5;196m0x" << std::hex << bp.first << "\x1B[0m" << std::endl;
     }
 }
-void debugger::dump_registers()
+void mydbg::debugger::dump_registers()
 {
     for (const auto &rd : g_register_descriptors)
     {
-        std::cout << "\u001b[33m" << rd.name << "\u001b[0m\t: 0x" << std::setfill('0') << std::setw(16) << std::hex << get_register_value(m_pid, rd.r) << std::endl;
+        if (rd.name != "orig_rax" && rd.name != "cs" && rd.name != "rflags" && rd.name != "ss" && rd.name != "fs_base" && rd.name != "eflags" && rd.name != "gs_base" && rd.name != "ds" && rd.name != "es" && rd.name != "fs" && rd.name != "gs")
+            std::cout << "\u001b[33m" << rd.name << "\u001b[0m\t: 0x" << std::setfill('0') << std::setw(16) << std::hex << get_register_value(m_pid, rd.r) << std::endl;
     }
 }
-uint64_t debugger::get_pc()
+uint64_t mydbg::debugger::get_pc()
 {
     return get_register_value(m_pid, reg::rip);
 }
-void debugger::wait_for_signal()
+void mydbg::debugger::wait_for_signal()
 {
     int wait_status;
     auto options = 0;
     waitpid(m_pid, &wait_status, options);
 }
-void debugger::set_pc(uint64_t pc)
+void mydbg::debugger::set_pc(uint64_t pc)
 {
     set_register_value(m_pid, reg::rip, pc);
 }
-void debugger::step_over_breakpoint()
+void mydbg::debugger::step_over_breakpoint()
 {
     auto potent_bp = get_pc() - 1;
     if (m_breakpoints.count(potent_bp))
@@ -228,9 +250,8 @@ int main(int argc, char *argv[])
         }
         pclose(pipe);
         std::cout << "Entry point: 0x" << addr << std::endl;
-        uint64_t entry_point = std::stoul(addr, 0, 16);
-        debugger dbg{prog, pid, entry_point};
-        dbg.set_breakpoint_at(0);
+        uint64_t entry_point = std::stol(addr, 0, 16);
+        mydbg::debugger dbg{prog, pid, entry_point};
         dbg.run();
     }
 }
