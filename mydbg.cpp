@@ -6,12 +6,131 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
+#include <fcntl.h>
 
 #include "linenoise.h"
 
 #include "debugger.hpp"
 #include "breakpoint.hpp"
 #include "regs.hpp"
+
+void mydbg::debugger::handle_sigtrap(siginfo_t info)
+{
+    switch (info.si_code)
+    {
+    case SI_KERNEL:
+    case TRAP_BRKPT:
+    {
+        set_pc(get_pc() - 1);
+        std::cout << "Hit breakpoint at 0x" << std::hex << get_pc() << std::endl;
+        auto offset_pc = offset_load_address(get_pc());
+        auto line_entry = get_line_entry_from_pc(offset_pc);
+        print_source(line_entry->file->path, line_entry->line);
+        return;
+    }
+    case TRAP_TRACE:
+        return;
+    default:
+        std::cout << "Unknown SIGTRAP code " << info.si_code << std::endl;
+        return;
+    }
+}
+siginfo_t mydbg::debugger::get_signal_info()
+{
+    siginfo_t info;
+    ptrace(PTRACE_GETSIGINFO, m_pid, nullptr, &info);
+    return info;
+}
+
+uint64_t mydbg::debugger::offset_load_address(uint64_t addr)
+{
+    return addr - m_load_addr;
+}
+
+void mydbg::debugger::initialise_load_address()
+{
+    if (m_elf.get_hdr().type == elf::et::dyn)
+    {
+        std::ifstream map("/proc/" + std::to_string(m_pid) + "/maps");
+        std::string addr;
+        std::getline(map, addr, '-');
+        m_load_addr = std::stoi(addr, 0, 16);
+    }
+}
+void mydbg::debugger::print_source(const std::string &file_name, unsigned line, unsigned n_lines_context)
+{
+    std::ifstream file{file_name};
+
+    auto startline = line <= n_lines_context ? 1 : line - n_lines_context;
+    auto endline = line + n_lines_context + (line < n_lines_context ? n_lines_context - line : 0) + 1;
+    char c{};
+    auto current_line = 1u;
+    while (current_line != startline && file.get(c))
+    {
+        if (c == '\n')
+        {
+            ++current_line;
+        }
+    }
+
+    std::cout << (current_line == line ? "> " : "  ");
+
+    while (current_line != endline && file.get(c))
+    {
+        std::cout << c;
+        if (c == '\n')
+        {
+            current_line++;
+        }
+        std::cout << (current_line == line ? "> " : "  ");
+    }
+    std::cout << std::endl;
+}
+
+dwarf::die mydbg::debugger::get_function_from_pc(uint64_t pc)
+{
+    for (auto &cu : m_dwarf.compilation_units())
+    {
+        if (die_pc_range(cu.root()).contains(pc))
+        {
+            for (const auto &die : cu.root())
+            {
+                if (die.tag == dwarf::DW_TAG::subprogram)
+                {
+                    if (die_pc_range(die).contains(pc))
+                    {
+                        return die;
+                    }
+                }
+            }
+        }
+    }
+
+    throw std::out_of_range{"Cannot find function"};
+}
+
+dwarf::line_table::iterator mydbg::debugger::get_line_entry_from_pc(uint64_t pc)
+{
+    for (auto &cu : m_dwarf.compilation_units())
+    {
+        if (die_pc_range(cu.root()).contains(pc))
+        {
+            auto &lt = cu.get_line_table();
+            auto it = lt.find_address(pc);
+            if (it == lt.end())
+            {
+                throw std::out_of_range{"Cannot find line entry"};
+            }
+            else
+            {
+                return it;
+            }
+        }
+    }
+
+    throw std::out_of_range{"Cannot find line entry"};
+}
 
 std::vector<std::string> split(const std::string &s, char delimiter)
 {
@@ -36,9 +155,8 @@ bool is_prefix(const std::string &s, const std::string &of)
 
 void mydbg::debugger::run()
 {
-    int wait_status;
-    auto options = 0;
-    waitpid(m_pid, &wait_status, options);
+    wait_for_signal();
+    initialise_load_address();
     char *line = nullptr;
     while ((line = linenoise("\x1B[1m\x1B[92mmydbg> \x1B[0m")) != nullptr)
     {
@@ -48,6 +166,7 @@ void mydbg::debugger::run()
         linenoiseHistoryFree();
     }
 }
+
 void mydbg::debugger::handle_command(const std::string &line)
 {
     auto args = split(line, ' ');
@@ -141,23 +260,27 @@ void mydbg::debugger::handle_command(const std::string &line)
         std::cerr << "\x1B[1m\x1B[91mUnknown command\x1B[0m\n";
     }
 }
+
 uint64_t mydbg::debugger::read_memory(uint64_t address)
 {
     return ptrace(PTRACE_PEEKDATA, m_pid, address, nullptr);
 }
+
 void mydbg::debugger::write_memory(uint64_t address, uint64_t value)
 {
     ptrace(PTRACE_POKEDATA, m_pid, address, value);
 }
+
 void mydbg::debugger::continue_execution()
 {
     // step_over_breakpoint();
     ptrace(PTRACE_CONT, m_pid, nullptr, nullptr);
     wait_for_signal();
 }
+
 void mydbg::debugger::set_breakpoint_at(uint64_t addr)
 {
-    intptr_t m_address = static_cast<intptr_t>(m_base_addr + addr);
+    intptr_t m_address = static_cast<intptr_t>(m_load_addr + addr);
     std::cout << "Set breakpoint at address \x1B[38;5;196m0x" << std::hex << m_address << "\x1B[0m" << std::endl;
     breakpoint bp{m_pid, m_address};
     bp.enable();
@@ -167,6 +290,7 @@ void mydbg::debugger::set_breakpoint_at(uint64_t addr)
         std::cout << "Breakpoint at address \x1B[38;5;196m0x" << std::hex << bp.first << "\x1B[0m" << std::endl;
     }
 }
+
 void mydbg::debugger::dump_registers()
 {
     for (const auto &rd : g_register_descriptors)
@@ -175,30 +299,45 @@ void mydbg::debugger::dump_registers()
             std::cout << "\u001b[33m" << rd.name << "\u001b[0m\t: 0x" << std::setfill('0') << std::setw(16) << std::hex << get_register_value(m_pid, rd.r) << std::endl;
     }
 }
+
 uint64_t mydbg::debugger::get_pc()
 {
     return get_register_value(m_pid, reg::rip);
 }
+
 void mydbg::debugger::wait_for_signal()
 {
     int wait_status;
     auto options = 0;
     waitpid(m_pid, &wait_status, options);
+
+    auto siginfo = get_signal_info();
+
+    switch (siginfo.si_signo)
+    {
+    case SIGTRAP:
+        handle_sigtrap(siginfo);
+        break;
+    case SIGSEGV:
+        std::cout << "Yay, segfault. Reason: " << siginfo.si_code << std::endl;
+        break;
+    default:
+        std::cout << "Got signal " << strsignal(siginfo.si_signo) << std::endl;
+    }
 }
+
 void mydbg::debugger::set_pc(uint64_t pc)
 {
     set_register_value(m_pid, reg::rip, pc);
 }
+
 void mydbg::debugger::step_over_breakpoint()
 {
-    auto potent_bp = get_pc() - 1;
-    if (m_breakpoints.count(potent_bp))
+    if (m_breakpoints.count(get_pc()))
     {
-        auto &bp = m_breakpoints[potent_bp];
+        auto &bp = m_breakpoints[get_pc()];
         if (bp.is_enabled())
         {
-            auto prev_instr_addr = potent_bp;
-            set_pc(prev_instr_addr);
             bp.disable();
             ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
             wait_for_signal();
@@ -206,6 +345,7 @@ void mydbg::debugger::step_over_breakpoint()
         }
     }
 }
+
 void execute_debugee(const std::string &prog_name)
 {
     if (ptrace(PTRACE_TRACEME, 0, 0, 0) < 0)
@@ -249,9 +389,7 @@ int main(int argc, char *argv[])
             addr.erase(std::remove(addr.begin(), addr.end(), '\n'), addr.end());
         }
         pclose(pipe);
-        std::cout << "Entry point: 0x" << addr << std::endl;
-        uint64_t entry_point = std::stol(addr, 0, 16);
-        mydbg::debugger dbg{prog, pid, entry_point};
+        mydbg::debugger dbg{prog, pid};
         dbg.run();
     }
 }

@@ -1,5 +1,5 @@
 # MY DEBUGGER
-This is my attempt to create a debugger in cpp. <br>
+This is my attempt to create a debugger in cpp with the help of external dependencies: linenoise and libelfin. <br>
 Currently, one can set breakpoints and continue execution, read and write any register and also memory<BR>
 
 ## How to install?

@@ -1,0 +1,8 @@
+libdir=/home/vibhatsu/Documents/workspace/Debugger/include/libelfin/elf
+includedir=/home/vibhatsu/Documents/workspace/Debugger/include/libelfin/elf
+
+Name: libelf++
+Description: C++11 ELF library
+Version: 0.1-49-gbdba76d
+Libs: -L${libdir} -lelf++
+Cflags: -I${includedir}
