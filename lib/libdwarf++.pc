@@ -1,9 +1,0 @@
-libdir=/home/vibhatsu/Documents/workspace/Debugger/include/libelfin/dwarf
-includedir=/home/vibhatsu/Documents/workspace/Debugger/include/libelfin/dwarf
-
-Name: libdwarf++
-Description: C++11 DWARF library
-Version: 0.1-49-gbdba76d
-Requires: libelf++ = 0.1-49-gbdba76d
-Libs: -L${libdir} -ldwarf++
-Cflags: -I${includedir}

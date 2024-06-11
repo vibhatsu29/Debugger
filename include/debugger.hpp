@@ -6,8 +6,8 @@
 #include <unordered_map>
 
 #include "breakpoint.hpp"
-#include "libelfin/dwarf/dwarf++.hh"
-#include "libelfin/elf/elf++.hh"
+#include "dwarf/dwarf++.hh"
+#include "elf/elf++.hh"
 
 namespace mydbg
 {
