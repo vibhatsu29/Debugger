@@ -3,3 +3,6 @@ CMakeCache.txt
 .vscode/*
 mydbg
 variable
+hello
+cmake_install.cmake
+Makefile
