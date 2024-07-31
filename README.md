@@ -43,6 +43,9 @@ Install the dependencies in the appropriate directories.
 - To write to a certain address in memory
     ```
     mem w <addr_offset> <data_to_be_written_in_hexadecimal_format>
+- To view call stack
+    ```
+    backtrace
 - To exit
     ```
     q
