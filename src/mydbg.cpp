@@ -15,6 +15,26 @@
 #include "breakpoint.hpp"
 #include "regs.hpp"
 
+void mydbg::debugger::print_backtrace()
+{
+    int color_grad = 42;
+    auto output_frame = [frame_number = 0, &color_grad](auto &&func) mutable
+    {
+        auto color = "\x1B[38;5;" + std::to_string(color_grad++) + "m";
+        std::cout << color << "frame #" << frame_number++ << " :0x" << dwarf::at_low_pc(func) << ' ' << dwarf::at_name(func) << "\x1B[0m" << std::endl;
+    };
+    auto current_func = get_function_from_pc(offset_load_address(get_pc()));
+    output_frame(current_func);
+    auto frame_pointer = get_register_value(m_pid, reg::rbp);
+    auto return_address = read_memory(frame_pointer + 8);
+    while (dwarf::at_name(current_func) != "main")
+    {
+        current_func = get_function_from_pc(offset_load_address(return_address));
+        output_frame(current_func);
+        frame_pointer = read_memory(frame_pointer);
+        return_address = read_memory(frame_pointer + 8);
+    }
+}
 void mydbg::debugger::handle_sigtrap(siginfo_t info)
 {
     switch (info.si_code)
@@ -171,8 +191,6 @@ void mydbg::debugger::handle_command(const std::string &line)
 {
     auto args = split(line, ' ');
     auto command = args[0];
-    if (!is_prefix(command, "q"))
-        dump_registers();
     if (is_prefix(command, "c"))
     {
         continue_execution();
@@ -224,6 +242,10 @@ void mydbg::debugger::handle_command(const std::string &line)
     {
         step_over_breakpoint();
     }
+    else if (is_prefix(command, "backtrace"))
+    {
+        print_backtrace();
+    }
     else if (is_prefix(command, "q"))
     {
         kill(m_pid, SIGKILL);
@@ -248,6 +270,7 @@ void mydbg::debugger::handle_command(const std::string &line)
                   << "mem w <address> <value> - Write memory at address\n"
                   << "so - Step over breakpoint\n"
                   << "si - Step instruction\n"
+                  << "backtrace - shows call stack\n"
                   << "q - Quit debugger\n"
                   << "help - Show this help message\n\x1B[0m";
     }

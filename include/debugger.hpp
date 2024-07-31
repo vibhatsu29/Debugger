@@ -38,6 +38,7 @@ namespace mydbg
         void print_source(const std::string &file_name, unsigned line, unsigned n_line_context = 2);
         siginfo_t get_signal_info();
         void handle_sigtrap(siginfo_t info);
+        void print_backtrace();
 
     private:
         std::string m_prog_name;
