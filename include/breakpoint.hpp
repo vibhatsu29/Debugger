@@ -24,7 +24,7 @@ namespace mydbg
 
         void disable()
         {
-            uint16_t data_with_int3 = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
+            auto data_with_int3 = ptrace(PTRACE_PEEKDATA, m_pid, m_addr, nullptr);
             std::cout << "data_with_int3: " << std::hex << data_with_int3 << std::endl;
             uint64_t data = (data_with_int3 & ~0xff) | m_saved_data;
             std::cout << "data: " << std::hex << data << std::endl;

@@ -342,7 +342,7 @@ void mydbg::debugger::step_over_breakpoint()
             bp.disable();
             ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
             wait_for_signal();
-            // bp.enable();
+            bp.enable();
         }
     }
 }
