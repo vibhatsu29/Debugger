@@ -1,17 +1,22 @@
 # MY DEBUGGER
 This is my attempt to create a debugger in cpp with the help of external dependencies: linenoise and libelfin. <br>
 Currently, one can set breakpoints and continue execution, read and write any register and also memory<BR>
+## Dependencies
+- linenoise
+- libelfin
 
+Install the dependencies in the appropriate directories.
 ## How to install?
 1. Download this repositary.
-2. Compile using command 
-    ```
-    g++ -I include ./include/cpp/* -o debugg
+2. Type the following commands in your terminal:
+    ```zsh
+    cmake CMakeLists.txt
+    make
     ```
 ## How to use?
 - To run 
     ```
-    ./debugg <your_program>
+    ./mydbg <your_program>
     ```
 - To add breakpoint
     ```
