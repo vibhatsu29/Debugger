@@ -242,7 +242,7 @@ void mydbg::debugger::handle_command(const std::string &line)
     {
         step_over_breakpoint();
     }
-    else if (is_prefix(command, "backtrace"))
+    else if (is_prefix(command, "sc"))
     {
         print_backtrace();
     }
