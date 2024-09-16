@@ -30,6 +30,7 @@ void e()
 void f()
 {
     int foo = 6;
+    int bar = foo++;
     e();
 }
 

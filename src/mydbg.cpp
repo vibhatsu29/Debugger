@@ -17,22 +17,26 @@
 
 void mydbg::debugger::print_backtrace()
 {
-    int color_grad = 42;
-    auto output_frame = [frame_number = 0, &color_grad](auto &&func) mutable
+    if (is_dwarf_present)
     {
-        auto color = "\x1B[38;5;" + std::to_string(color_grad++) + "m";
-        std::cout << color << "frame #" << frame_number++ << " :0x" << dwarf::at_low_pc(func) << ' ' << dwarf::at_name(func) << "\x1B[0m" << std::endl;
-    };
-    auto current_func = get_function_from_pc(offset_load_address(get_pc()));
-    output_frame(current_func);
-    auto frame_pointer = get_register_value(m_pid, reg::rbp);
-    auto return_address = read_memory(frame_pointer + 8);
-    while (dwarf::at_name(current_func) != "main")
-    {
-        current_func = get_function_from_pc(offset_load_address(return_address));
+        int color_grad = 42;
+        auto output_frame = [frame_number = 0, &color_grad](auto &&func) mutable
+        {
+            auto color = "\x1B[38;5;" + std::to_string(color_grad++) + "m";
+            std::cout << color << "frame #" << frame_number++ << " :0x" << dwarf::at_low_pc(func) << ' ' << dwarf::at_name(func) << "\x1B[0m" << std::endl;
+        };
+        auto current_func = get_function_from_pc(offset_load_address(get_pc()));
         output_frame(current_func);
-        frame_pointer = read_memory(frame_pointer);
-        return_address = read_memory(frame_pointer + 8);
+        auto frame_pointer = get_register_value(m_pid, reg::rbp);
+        auto return_address = read_memory(frame_pointer + 8);
+        while (dwarf::at_name(current_func) != "main")
+        // while (frame_pointer != 0x0)
+        {
+            current_func = get_function_from_pc(offset_load_address(return_address));
+            output_frame(current_func);
+            frame_pointer = read_memory(frame_pointer);
+            return_address = read_memory(frame_pointer + 8);
+        }
     }
 }
 void mydbg::debugger::handle_sigtrap(siginfo_t info)
@@ -44,9 +48,12 @@ void mydbg::debugger::handle_sigtrap(siginfo_t info)
     {
         set_pc(get_pc() - 1);
         std::cout << "Hit breakpoint at 0x" << std::hex << get_pc() << std::endl;
-        auto offset_pc = offset_load_address(get_pc());
-        auto line_entry = get_line_entry_from_pc(offset_pc);
-        print_source(line_entry->file->path, line_entry->line);
+        if (is_dwarf_present)
+        {
+            auto offset_pc = offset_load_address(get_pc());
+            auto line_entry = get_line_entry_from_pc(offset_pc);
+            print_source(line_entry->file->path, line_entry->line);
+        }
         return;
     }
     case TRAP_TRACE:
@@ -118,9 +125,12 @@ dwarf::die mydbg::debugger::get_function_from_pc(uint64_t pc)
             {
                 if (die.tag == dwarf::DW_TAG::subprogram)
                 {
-                    if (die_pc_range(die).contains(pc))
+                    if (die.has(dwarf::DW_AT::low_pc))
                     {
-                        return die;
+                        if (die_pc_range(die).contains(pc))
+                        {
+                            return die;
+                        }
                     }
                 }
             }
@@ -189,6 +199,9 @@ void mydbg::debugger::run()
 
 void mydbg::debugger::handle_command(const std::string &line)
 {
+    // auto offset_pc = offset_load_address(get_pc());
+    // auto line_entry = get_line_entry_from_pc(offset_pc);
+    // print_source(line_entry->file->path, line_entry->line);
     auto args = split(line, ' ');
     auto command = args[0];
     if (is_prefix(command, "c"))
@@ -242,9 +255,10 @@ void mydbg::debugger::handle_command(const std::string &line)
     {
         step_over_breakpoint();
     }
-    else if (is_prefix(command, "sc"))
+    else if (is_prefix(command, "bt"))
     {
-        print_backtrace();
+        if (is_dwarf_present)
+            print_backtrace();
     }
     else if (is_prefix(command, "q"))
     {
@@ -255,8 +269,8 @@ void mydbg::debugger::handle_command(const std::string &line)
     else if (is_prefix(command, "si"))
     {
         step_over_breakpoint();
-        ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
-        wait_for_signal();
+        // ptrace(PTRACE_SINGLESTEP, m_pid, nullptr, nullptr);
+        // wait_for_signal();
     }
     else if (is_prefix(command, "help"))
     {
@@ -270,7 +284,7 @@ void mydbg::debugger::handle_command(const std::string &line)
                   << "mem w <address> <value> - Write memory at address\n"
                   << "so - Step over breakpoint\n"
                   << "si - Step instruction\n"
-                  << "backtrace - shows call stack\n"
+                  << "bt             - shows call stack\n"
                   << "q - Quit debugger\n"
                   << "help - Show this help message\n\x1B[0m";
     }
@@ -367,6 +381,11 @@ void mydbg::debugger::step_over_breakpoint()
             wait_for_signal();
             bp.enable();
         }
+        else
+        {
+            ptrace(PTRACE_SINGLESTEP, nullptr, nullptr);
+            wait_for_signal();
+        }
     }
 }
 
@@ -374,7 +393,9 @@ void execute_debugee(const std::string &prog_name)
 {
     if (ptrace(PTRACE_TRACEME, 0, 0, 0) < 0)
     {
-        std::cerr << "Ptrace unsuccessful\n";
+
+        std::cerr
+            << "Ptrace unsuccessful\n";
         return;
     }
     execl(prog_name.c_str(), prog_name.c_str(), nullptr);

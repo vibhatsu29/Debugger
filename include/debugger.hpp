@@ -4,6 +4,7 @@
 #include <string>
 #include <linux/types.h>
 #include <unordered_map>
+#include <stdexcept>
 
 #include "breakpoint.hpp"
 #include "dwarf/dwarf++.hh"
@@ -18,8 +19,17 @@ namespace mydbg
         {
             auto fd = open(m_prog_name.c_str(), O_RDONLY);
             m_elf = elf::elf{elf::create_mmap_loader(fd)};
-            m_dwarf = dwarf::dwarf{dwarf::elf::create_loader(m_elf)};
+            try
+            {
+                m_dwarf = dwarf::dwarf{dwarf::elf::create_loader(m_elf)};
+            }
+            catch (const std::exception &e)
+            {
+                is_dwarf_present = false;
+                std::cout << "Failed to get the dwarf data." << std::endl;
+            }
         }
+        bool is_dwarf_present = true;
         void run();
         void handle_command(const std::string &line);
         void continue_execution();
