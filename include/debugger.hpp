@@ -12,6 +12,16 @@
 
 namespace mydbg
 {
+    typedef struct
+    {
+        std::string name;
+        uint64_t address;
+    } function_info;
+    enum class debug_info
+    {
+        DWARF = 0,
+        SYMTAB = 1,
+    };
     class debugger
     {
     public:
@@ -25,11 +35,10 @@ namespace mydbg
             }
             catch (const std::exception &e)
             {
-                is_dwarf_present = false;
+                DI = debug_info::SYMTAB;
                 std::cout << "Failed to get the dwarf data." << std::endl;
             }
         }
-        bool is_dwarf_present = true;
         void run();
         void handle_command(const std::string &line);
         void continue_execution();
@@ -49,6 +58,10 @@ namespace mydbg
         siginfo_t get_signal_info();
         void handle_sigtrap(siginfo_t info);
         void print_backtrace();
+        auto get_elfhdr() { return m_elf.get_hdr(); }
+        auto get_section(unsigned index) { return m_elf.get_section(index); }
+        function_info get_function_from_pc_symtab(uint64_t pc);
+        debug_info DI = debug_info::DWARF;
 
     private:
         std::string m_prog_name;

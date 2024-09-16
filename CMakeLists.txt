@@ -17,7 +17,7 @@ set_target_properties(variable
                       
 add_executable(unwinding samples/stack_unwinding.cpp)
 set_target_properties(unwinding
-                      PROPERTIES COMPILE_FLAGS "-gdwarf-2 -O0")
+                      PROPERTIES COMPILE_FLAGS "-O0")
 
 add_custom_target(
    libelfin

@@ -8,7 +8,6 @@
 #include <iomanip>
 #include <fstream>
 #include <fcntl.h>
-
 #include "linenoise.h"
 
 #include "debugger.hpp"
@@ -17,28 +16,72 @@
 
 void mydbg::debugger::print_backtrace()
 {
-    if (is_dwarf_present)
+    int color_grad = 42;
+    auto output_frame = [frame_number = 0, &color_grad](auto &&func_name, auto &&func_addr) mutable
     {
-        int color_grad = 42;
-        auto output_frame = [frame_number = 0, &color_grad](auto &&func) mutable
-        {
-            auto color = "\x1B[38;5;" + std::to_string(color_grad++) + "m";
-            std::cout << color << "frame #" << frame_number++ << " :0x" << dwarf::at_low_pc(func) << ' ' << dwarf::at_name(func) << "\x1B[0m" << std::endl;
-        };
+        auto color = "\x1B[38;5;" + std::to_string(color_grad++) + "m";
+        std::cout << color << "frame #" << frame_number++ << " :0x" << func_addr << ' ' << func_name << "\x1B[0m" << std::endl;
+    };
+    if (debugger::DI == debug_info::DWARF)
+    {
+
         auto current_func = get_function_from_pc(offset_load_address(get_pc()));
-        output_frame(current_func);
+        output_frame(dwarf::at_name(current_func), dwarf::at_low_pc(current_func));
         auto frame_pointer = get_register_value(m_pid, reg::rbp);
         auto return_address = read_memory(frame_pointer + 8);
         while (dwarf::at_name(current_func) != "main")
         // while (frame_pointer != 0x0)
         {
             current_func = get_function_from_pc(offset_load_address(return_address));
-            output_frame(current_func);
+            output_frame(dwarf::at_name(current_func), dwarf::at_low_pc(current_func));
+            frame_pointer = read_memory(frame_pointer);
+            return_address = read_memory(frame_pointer + 8);
+        }
+    }
+    else
+    {
+        auto current_func = get_function_from_pc_symtab(offset_load_address(get_pc()));
+        output_frame(current_func.name, current_func.address);
+        auto frame_pointer = get_register_value(m_pid, reg::rbp);
+        auto return_address = read_memory(frame_pointer + 8);
+        while (current_func.name != "main")
+        {
+            current_func = get_function_from_pc_symtab(offset_load_address(return_address));
+            output_frame(current_func.name, current_func.address);
             frame_pointer = read_memory(frame_pointer);
             return_address = read_memory(frame_pointer + 8);
         }
     }
 }
+
+mydbg::function_info mydbg::debugger::get_function_from_pc_symtab(uint64_t pc)
+{
+    auto eHdr = debugger::get_elfhdr();
+    function_info info;
+
+    for (int i = 0; i < eHdr.shnum; i++)
+    {
+        elf::section sec = get_section(i);
+        if (sec.get_hdr().type == elf::sht::symtab)
+        {
+            for (const auto &sym : sec.as_symtab())
+            {
+                auto sym_value = sym.get_data().value;
+                auto sym_size = sym.get_data().size;
+                if (pc >= sym_value && pc < sym_value + sym_size)
+                {
+                    info.name = sym.get_name();
+                    info.address = sym_value;
+                    return info;
+                }
+            }
+        }
+    }
+    info.name = "unkown";
+    info.address = pc;
+    return info;
+}
+
 void mydbg::debugger::handle_sigtrap(siginfo_t info)
 {
     switch (info.si_code)
@@ -48,7 +91,7 @@ void mydbg::debugger::handle_sigtrap(siginfo_t info)
     {
         set_pc(get_pc() - 1);
         std::cout << "Hit breakpoint at 0x" << std::hex << get_pc() << std::endl;
-        if (is_dwarf_present)
+        if (debugger::DI == debug_info::DWARF)
         {
             auto offset_pc = offset_load_address(get_pc());
             auto line_entry = get_line_entry_from_pc(offset_pc);
@@ -257,8 +300,7 @@ void mydbg::debugger::handle_command(const std::string &line)
     }
     else if (is_prefix(command, "bt"))
     {
-        if (is_dwarf_present)
-            print_backtrace();
+        print_backtrace();
     }
     else if (is_prefix(command, "q"))
     {
