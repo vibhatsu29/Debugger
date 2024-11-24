@@ -4,3 +4,6 @@
 [submodule "ext/linenoise"]
 	path = ext/linenoise
 	url = https://github.com/antirez/linenoise.git
+[submodule "ext/capstone"]
+	path = ext/capstone
+	url =https://github.com/capstone-engine/capstone.git
