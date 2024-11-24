@@ -13,6 +13,7 @@
 #include "debugger.hpp"
 #include "breakpoint.hpp"
 #include "regs.hpp"
+#include "disassembler.hpp"
 
 void mydbg::debugger::print_backtrace()
 {
@@ -30,7 +31,6 @@ void mydbg::debugger::print_backtrace()
         auto frame_pointer = get_register_value(m_pid, reg::rbp);
         auto return_address = read_memory(frame_pointer + 8);
         while (dwarf::at_name(current_func) != "main")
-        // while (frame_pointer != 0x0)
         {
             current_func = get_function_from_pc(offset_load_address(return_address));
             output_frame(dwarf::at_name(current_func), dwarf::at_low_pc(current_func));
@@ -301,6 +301,12 @@ void mydbg::debugger::handle_command(const std::string &line)
     else if (is_prefix(command, "bt"))
     {
         print_backtrace();
+    }
+    else if (is_prefix(command, "disass"))
+    {
+        disassember di{m_prog_name};
+        func_data func = di.get_func(args[1]);
+        di.disassemble(func.func_code, func.code_size, func.address);
     }
     else if (is_prefix(command, "q"))
     {
