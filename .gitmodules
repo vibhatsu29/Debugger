@@ -6,4 +6,4 @@
 	url = https://github.com/antirez/linenoise.git
 [submodule "ext/capstone"]
 	path = ext/capstone
-	url =https://github.com/capstone-engine/capstone.git
+	url = https://github.com/capstone-engine/capstone.git
