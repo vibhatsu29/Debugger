@@ -1,17 +1,19 @@
 # MY DEBUGGER
 This is my attempt to create a debugger in cpp with the help of external dependencies: linenoise and libelfin. <br>
-Currently, one can set breakpoints and continue execution, read and write any register and also memory<BR>
+I have used capstone for disassembling the code.<BR>
 ## Dependencies
 - linenoise
 - libelfin
+- capstone
 
 Install the dependencies in the appropriate directories.
 ## How to install?
 1. Download this repositary.
 2. Type the following commands in your terminal:
     ```zsh
-    cmake CMakeLists.txt
-    make
+    cmake -S . -B build
+    cmake --buid build
+    cd build
     ```
 ## How to use?
 - To run 
@@ -45,7 +47,10 @@ Install the dependencies in the appropriate directories.
     mem w <addr_offset> <data_to_be_written_in_hexadecimal_format>
 - To view call stack
     ```
-    sc
+    bt
+- To disassemble a function
+    ```
+    disass <func_name>
 - To exit
     ```
     q
